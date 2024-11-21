@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum EnvVar {
     GHToken,
     GitHubToken,
@@ -69,26 +69,24 @@ fn token_from_env(host: &str) -> Option<EnvToken> {
         github_enterprise_token: Option<EnvToken>,
     }
 
+    fn to_env_token(var: EnvVar) -> impl Fn(String) -> EnvToken {
+        move |value| EnvToken { value, var }
+    }
+
     // TODO: consider whether we should return an error here.
     let env_tokens = EnvTokens {
-        gh_token: std::env::var("GH_TOKEN").ok().map(|s| EnvToken {
-            value: s,
-            var: EnvVar::GHToken,
-        }),
-        github_token: std::env::var("GITHUB_TOKEN").ok().map(|s| EnvToken {
-            value: s,
-            var: EnvVar::GitHubToken,
-        }),
-        gh_enterprise_token: std::env::var("GH_ENTERPRISE_TOKEN").ok().map(|s| EnvToken {
-            value: s,
-            var: EnvVar::GHEnterpriseToken,
-        }),
+        gh_token: std::env::var("GH_TOKEN")
+            .ok()
+            .map(to_env_token(EnvVar::GHToken)),
+        github_token: std::env::var("GITHUB_TOKEN")
+            .ok()
+            .map(to_env_token(EnvVar::GitHubToken)),
+        gh_enterprise_token: std::env::var("GH_ENTERPRISE_TOKEN")
+            .ok()
+            .map(to_env_token(EnvVar::GHEnterpriseToken)),
         github_enterprise_token: std::env::var("GITHUB_ENTERPRISE_TOKEN")
             .ok()
-            .map(|s| EnvToken {
-                value: s,
-                var: EnvVar::GitHubEnterpriseToken,
-            }),
+            .map(to_env_token(EnvVar::GitHubEnterpriseToken)),
     };
 
     match host {
