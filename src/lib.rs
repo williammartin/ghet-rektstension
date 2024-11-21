@@ -13,22 +13,26 @@ pub enum Token {
     Keyring { value: String },
 }
 
-impl Token {
-    fn from_env_token(env_token: EnvToken) -> Self {
+impl From<EnvToken> for Token {
+    fn from(env_token: EnvToken) -> Self {
         Self::Env {
             value: env_token.value,
             var: env_token.var,
         }
     }
+}
 
-    fn from_config_token(config_token: ConfigToken) -> Self {
+impl From<ConfigToken> for Token {
+    fn from(config_token: ConfigToken) -> Self {
         Self::Config {
             value: config_token.value,
             path: config_token.path,
         }
     }
+}
 
-    fn from_keyring_token(keyring_token: KeyringToken) -> Self {
+impl From<KeyringToken> for Token {
+    fn from(keyring_token: KeyringToken) -> Self {
         Self::Keyring {
             value: keyring_token.value,
         }
@@ -51,9 +55,9 @@ struct KeyringToken {
 
 pub fn token_for_host(host: &str) -> Option<Token> {
     token_from_env(host)
-        .map(Token::from_env_token)
-        .or_else(|| token_from_config(host).map(Token::from_config_token))
-        .or_else(|| token_from_keyring(host).map(Token::from_keyring_token))
+        .map(Token::from)
+        .or_else(|| token_from_config(host).map(Token::from))
+        .or_else(|| token_from_keyring(host).map(Token::from))
 }
 
 fn token_from_env(host: &str) -> Option<EnvToken> {
