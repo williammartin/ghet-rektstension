@@ -1,3 +1,6 @@
+use core::str;
+use std::{process::Command, str::Utf8Error};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Source {
     Env(Var),
@@ -56,6 +59,7 @@ struct ConfigToken {
     path: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct KeyringToken {
     value: String,
 }
@@ -64,7 +68,13 @@ pub fn token_for_host(host: &str) -> Option<Token> {
     token_from_env(host)
         .map(Token::from)
         .or_else(|| token_from_config(host).map(Token::from))
-        .or_else(|| token_from_keyring(host).map(Token::from))
+        .or_else(|| {
+            token_from_keyring(host)
+                .map_err(|err| panic!("{err:?}"))
+                .ok()
+                .flatten()
+                .map(Token::from)
+        })
 }
 
 fn token_from_env(host: &str) -> Option<EnvToken> {
@@ -110,9 +120,54 @@ fn token_from_config(_: &str) -> Option<ConfigToken> {
     None
 }
 
-// TODO
-fn token_from_keyring(_: &str) -> Option<KeyringToken> {
-    None
+#[derive(Debug, PartialEq, Eq)]
+pub enum TokenFromKeyringError {
+    FailToExecute(std::io::ErrorKind),
+    StdoutNotUTF8(Utf8Error),
+    StdErrorNotUTF8(Utf8Error),
+    OutputStatusFail(String),
+}
+
+fn token_from_keyring(host: &str) -> Result<Option<KeyringToken>, TokenFromKeyringError> {
+    let args;
+
+    #[cfg(test)]
+    {
+        args = ["auth", "token", "--hostname", host];
+    }
+
+    #[cfg(not(test))]
+    {
+        args = ["auth", "token", "--secure-storage", "--hostname", host];
+    }
+
+    Command::new("gh")
+        .args(args)
+        .output()
+        .map_err(|err| TokenFromKeyringError::FailToExecute(err.kind()))
+        .and_then(|output| {
+            if output.status.success() {
+                str::from_utf8(&output.stdout)
+                    .map_err(TokenFromKeyringError::StdoutNotUTF8)
+                    .map(|value| {
+                        Some(KeyringToken {
+                            value: value.trim().to_string(),
+                        })
+                    })
+            } else {
+                str::from_utf8(&output.stderr)
+                    .map_err(TokenFromKeyringError::StdErrorNotUTF8)
+                    .and_then(|error_string| {
+                        if error_string.contains("no oauth token found") {
+                            Ok(None)
+                        } else {
+                            Err(TokenFromKeyringError::OutputStatusFail(
+                                error_string.to_string(),
+                            ))
+                        }
+                    })
+            }
+        })
 }
 
 #[cfg(test)]
@@ -223,5 +278,17 @@ mod tests {
                 )
             },
         );
+    }
+
+    #[test]
+    fn token_for_keyring_asks_for_token_from_gh() {
+        temp_env::with_var("GH_TOKEN", Some("gh-token-value"), || {
+            assert_eq!(
+                token_from_keyring("github.com"),
+                Ok(Some(KeyringToken {
+                    value: "gh-token-value".to_owned(),
+                })),
+            )
+        });
     }
 }
