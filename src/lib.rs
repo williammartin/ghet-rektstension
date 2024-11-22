@@ -18,8 +18,8 @@ pub enum Var {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Token {
-    value: String,
-    source: Source,
+    pub value: String,
+    pub source: Source,
 }
 
 impl From<EnvToken> for Token {
