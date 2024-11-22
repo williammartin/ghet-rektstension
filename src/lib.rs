@@ -1,5 +1,12 @@
+#[derive(Debug, PartialEq, Eq)]
+pub enum Source {
+    Env(Var),
+    Config(String), // path to file
+    Keyring,
+}
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum EnvVar {
+pub enum Var {
     GHToken,
     GitHubToken,
     GHEnterpriseToken,
@@ -7,41 +14,41 @@ pub enum EnvVar {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Token {
-    Env { value: String, var: EnvVar },
-    Config { value: String, path: String },
-    Keyring { value: String },
+pub struct Token {
+    value: String,
+    source: Source,
 }
 
 impl From<EnvToken> for Token {
     fn from(env_token: EnvToken) -> Self {
-        Self::Env {
+        Self {
             value: env_token.value,
-            var: env_token.var,
+            source: Source::Env(env_token.var),
         }
     }
 }
 
 impl From<ConfigToken> for Token {
     fn from(config_token: ConfigToken) -> Self {
-        Self::Config {
+        Self {
             value: config_token.value,
-            path: config_token.path,
+            source: Source::Config(config_token.path),
         }
     }
 }
 
 impl From<KeyringToken> for Token {
     fn from(keyring_token: KeyringToken) -> Self {
-        Self::Keyring {
+        Self {
             value: keyring_token.value,
+            source: Source::Keyring,
         }
     }
 }
 
 struct EnvToken {
     value: String,
-    var: EnvVar,
+    var: Var,
 }
 
 struct ConfigToken {
@@ -69,7 +76,7 @@ fn token_from_env(host: &str) -> Option<EnvToken> {
         github_enterprise_token: Option<EnvToken>,
     }
 
-    fn to_env_token(var: EnvVar) -> impl Fn(String) -> EnvToken {
+    fn to_env_token(var: Var) -> impl Fn(String) -> EnvToken {
         move |value| EnvToken { value, var }
     }
 
@@ -77,16 +84,16 @@ fn token_from_env(host: &str) -> Option<EnvToken> {
     let env_tokens = EnvTokens {
         gh_token: std::env::var("GH_TOKEN")
             .ok()
-            .map(to_env_token(EnvVar::GHToken)),
+            .map(to_env_token(Var::GHToken)),
         github_token: std::env::var("GITHUB_TOKEN")
             .ok()
-            .map(to_env_token(EnvVar::GitHubToken)),
+            .map(to_env_token(Var::GitHubToken)),
         gh_enterprise_token: std::env::var("GH_ENTERPRISE_TOKEN")
             .ok()
-            .map(to_env_token(EnvVar::GHEnterpriseToken)),
+            .map(to_env_token(Var::GHEnterpriseToken)),
         github_enterprise_token: std::env::var("GITHUB_ENTERPRISE_TOKEN")
             .ok()
-            .map(to_env_token(EnvVar::GitHubEnterpriseToken)),
+            .map(to_env_token(Var::GitHubEnterpriseToken)),
     };
 
     match host {
@@ -122,9 +129,9 @@ mod tests {
         temp_env::with_var("GH_TOKEN", Some("gh-token-value"), || {
             assert_eq!(
                 token_for_host("github.com"),
-                Some(Token::Env {
+                Some(Token {
                     value: "gh-token-value".to_owned(),
-                    var: EnvVar::GHToken
+                    source: Source::Env(Var::GHToken)
                 }),
             )
         });
@@ -135,9 +142,9 @@ mod tests {
         temp_env::with_var("GITHUB_TOKEN", Some("github-token-value"), || {
             assert_eq!(
                 token_for_host("github.com"),
-                Some(Token::Env {
+                Some(Token {
                     value: "github-token-value".to_owned(),
-                    var: EnvVar::GitHubToken
+                    source: Source::Env(Var::GitHubToken)
                 })
             )
         });
@@ -153,9 +160,9 @@ mod tests {
             || {
                 assert_eq!(
                     token_for_host("github.com"),
-                    Some(Token::Env {
+                    Some(Token {
                         value: "gh-token-value".to_owned(),
-                        var: EnvVar::GHToken
+                        source: Source::Env(Var::GHToken)
                     })
                 )
             },
@@ -170,9 +177,9 @@ mod tests {
             || {
                 assert_eq!(
                     token_for_host("my.ghes.com"),
-                    Some(Token::Env {
+                    Some(Token {
                         value: "gh-enterprise-token-value".to_owned(),
-                        var: EnvVar::GHEnterpriseToken
+                        source: Source::Env(Var::GHEnterpriseToken)
                     })
                 )
             },
@@ -187,9 +194,9 @@ mod tests {
             || {
                 assert_eq!(
                     token_for_host("my.ghes.com"),
-                    Some(Token::Env {
+                    Some(Token {
                         value: "github-enterprise-token-value".to_owned(),
-                        var: EnvVar::GitHubEnterpriseToken
+                        source: Source::Env(Var::GitHubEnterpriseToken)
                     })
                 )
             },
@@ -209,9 +216,9 @@ mod tests {
             || {
                 assert_eq!(
                     token_for_host("my.ghes.com"),
-                    Some(Token::Env {
+                    Some(Token {
                         value: "gh-enterprise-token-value".to_owned(),
-                        var: EnvVar::GHEnterpriseToken
+                        source: Source::Env(Var::GHEnterpriseToken)
                     })
                 )
             },
